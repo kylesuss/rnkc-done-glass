@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 @main
-struct DoneBarApp: App {
+struct RNKCDoneGlassApp: App {
   var body: some Scene {
     WindowGroup { ContentView() }
   }
@@ -117,7 +117,7 @@ struct ContentView: View {
             .accessibilityIdentifier("swiftuiProminent")
         }
       }
-      .navigationTitle("Done bars")
+      .navigationTitle("Done on glass")
       .toolbar {
         ToolbarItemGroup(placement: .keyboard) {
           Spacer()

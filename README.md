@@ -1,4 +1,4 @@
-# DoneBar: `KeyboardExtender` vs native keyboard accessories on iOS 26
+# rnkc-done-glass: `KeyboardExtender` vs native keyboard accessories on iOS 26
 
 A tiny native iOS app that compares, side by side on an iOS 26 simulator:
 
