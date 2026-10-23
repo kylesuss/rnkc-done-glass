@@ -18,7 +18,10 @@ struct RNKCField: UIViewRepresentable {
   let variant: RNKCVariant
   var testID: String? = nil
 
-  private static let barHeight: CGFloat = 40  // the pill alone; the container supplies the 10pt float
+  // Native UIToolbar `.prominent` "Done", measured on iOS 26: 73×48pt, 16pt from the trailing edge.
+  private static let pillSize = CGSize(width: 73, height: 48)
+  private static let trailingInset: CGFloat = 16
+  private static let barHeight = pillSize.height  // the pill alone; the container adds the 10pt float
 
   final class Coordinator {
     var container: UIView?
@@ -78,14 +81,14 @@ struct RNKCField: UIViewRepresentable {
   }
 
   /// What `@callstack/liquid-glass`'s `LiquidGlassView` renders: a `UIGlassEffect` view, tinted,
-  /// interactive, capsule-cornered, at the trailing edge with 8pt inset.
+  /// interactive, capsule-cornered, sized and inset like the native item.
   private static func tintedPill(width: CGFloat, action: UIAction) -> UIView {
     let effect = UIGlassEffect()
     effect.tintColor = .tintColor
     effect.isInteractive = true
     let glass = UIVisualEffectView(effect: effect)
     glass.cornerConfiguration = .capsule()
-    glass.frame = CGRect(x: width - 8 - 66, y: 0, width: 66, height: 40)
+    glass.frame = pillFrame(width: width)
 
     var config = UIButton.Configuration.plain()
     config.title = "Done"
@@ -100,7 +103,11 @@ struct RNKCField: UIViewRepresentable {
     var config = UIButton.Configuration.plain()
     config.title = "Done"
     let button = UIButton(configuration: config, primaryAction: action)
-    button.frame = CGRect(x: width - 16 - 66, y: 0, width: 66, height: 40)
+    button.frame = pillFrame(width: width)
     return button
+  }
+
+  private static func pillFrame(width: CGFloat) -> CGRect {
+    CGRect(origin: CGPoint(x: width - trailingInset - pillSize.width, y: 0), size: pillSize)
   }
 }
