@@ -4,7 +4,12 @@ import UIKit
 @main
 struct RNKCDoneGlassApp: App {
   var body: some Scene {
-    WindowGroup { ContentView() }
+    WindowGroup {
+      TabView {
+        Tab("Compare", systemImage: "rectangle.split.3x1") { CompareView() }
+        Tab("All", systemImage: "list.bullet") { ContentView() }
+      }
+    }
   }
 }
 
@@ -61,6 +66,30 @@ struct NoBarField: UIViewRepresentable {
   }
 
   func updateUIView(_ uiView: UITextField, context: Context) {}
+}
+
+/// The three rows worth comparing, with nothing behind the bar so the glass reads clearly.
+struct CompareView: View {
+  var body: some View {
+    NavigationStack {
+      Form {
+        Section {
+          LabeledContent("Native · UIToolbar") {
+            UIKitField(variant: .prominentDone, testID: "compareNative")
+          }
+          LabeledContent("RNKC 1.22.8") {
+            RNKCField(variant: .stockTintedPill, testID: "compareStock")
+          }
+          LabeledContent("RNKC · glass={false}") {
+            RNKCField(variant: .patchedTintedPill, testID: "comparePatched")
+          }
+        } footer: {
+          Text("Same tinted pill in each. Tap a row's value to focus it.")
+        }
+      }
+      .navigationTitle("Compare")
+    }
+  }
 }
 
 struct ContentView: View {
