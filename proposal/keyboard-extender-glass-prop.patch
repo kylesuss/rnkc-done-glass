@@ -1,0 +1,210 @@
+diff --git a/ios/views/KeyboardExtenderContainerView.swift b/ios/views/KeyboardExtenderContainerView.swift
+index 0b4f188..ca6cc6e 100644
+--- a/ios/views/KeyboardExtenderContainerView.swift
++++ b/ios/views/KeyboardExtenderContainerView.swift
+@@ -23,10 +23,10 @@ public class KeyboardExtenderContainerView: NSObject {
+     return usesModernKeyboard() ? 30 : 0
+   }
+ 
+-  @objc public static func create(frame: CGRect, contentView: UIView) -> UIView {
++  @objc public static func create(frame: CGRect, contentView: UIView, glass: Bool) -> UIView {
+     if usesModernKeyboard() {
+       if #available(iOS 26.0, *) {
+-        return ModernContainerView(frame: frame, contentView: contentView)
++        return ModernContainerView(frame: frame, contentView: contentView, glass: glass)
+       }
+     }
+     return LegacyContainerView(frame: frame, contentView: contentView)
+@@ -94,7 +94,19 @@ private class BaseContainerView: UIInputView {
+ private class ModernContainerView: BaseContainerView {
+   private let paddingHorizontal: CGFloat = 20.0
+   private let paddingBottom: CGFloat = 10.0
+-  private var visualEffectView: UIVisualEffectView?
++  private let glass: Bool
++  /// The glass capsule, or with `glass: false` a plain view in the same frame.
++  private var floatingView: UIView?
++
++  init(frame: CGRect, contentView: UIView, glass: Bool) {
++    self.glass = glass
++    super.init(frame: frame, contentView: contentView)
++  }
++
++  @available(*, unavailable)
++  required init?(coder _: NSCoder) {
++    fatalError("init(coder:) has not been implemented")
++  }
+ 
+   override func setupContainerSpecifics() {
+     setupVisualEffect()
+@@ -102,6 +114,14 @@ private class ModernContainerView: BaseContainerView {
+   }
+ 
+   private func setupVisualEffect() {
++    guard glass else {
++      let plainView = UIView()
++      plainView.addSubview(contentView)
++      addSubview(plainView)
++      floatingView = plainView
++      return
++    }
++
+     #if canImport(UIKit.UIGlassEffect)
+       let isDark = FocusedInputHolder.shared.get()?.keyboardAppearanceValue == "dark"
+       let glassEffect = UIGlassEffect()
+@@ -110,19 +130,17 @@ private class ModernContainerView: BaseContainerView {
+       glassEffect.tintColor = color
+       glassEffect.isInteractive = true
+ 
+-      visualEffectView = UIVisualEffectView(effect: glassEffect)
+-      visualEffectView?.overrideUserInterfaceStyle = isDark ? .dark : .light
+-      visualEffectView?.cornerConfiguration = .capsule()
+-
+-      if let visualEffectView = visualEffectView {
+-        visualEffectView.contentView.addSubview(contentView)
+-        addSubview(visualEffectView)
+-      }
++      let visualEffectView = UIVisualEffectView(effect: glassEffect)
++      visualEffectView.overrideUserInterfaceStyle = isDark ? .dark : .light
++      visualEffectView.cornerConfiguration = .capsule()
++      visualEffectView.contentView.addSubview(contentView)
++      addSubview(visualEffectView)
++      floatingView = visualEffectView
+     #endif
+   }
+ 
+   override func updateContentFrame(desiredHeight: CGFloat) {
+-    visualEffectView?.frame = CGRect(
++    floatingView?.frame = CGRect(
+       x: paddingHorizontal,
+       y: -paddingBottom,
+       width: bounds.width - 2 * paddingHorizontal,
+diff --git a/ios/views/KeyboardExtenderManager.h b/ios/views/KeyboardExtenderManager.h
+index 5297c67..59bfc69 100644
+--- a/ios/views/KeyboardExtenderManager.h
++++ b/ios/views/KeyboardExtenderManager.h
+@@ -26,4 +26,5 @@
+ 
+ #endif
+ @property (nonatomic, assign) BOOL enabled;
++@property (nonatomic, assign) BOOL glass;
+ @end
+diff --git a/ios/views/KeyboardExtenderManager.mm b/ios/views/KeyboardExtenderManager.mm
+index 18f2d8c..c87d1c7 100644
+--- a/ios/views/KeyboardExtenderManager.mm
++++ b/ios/views/KeyboardExtenderManager.mm
+@@ -38,6 +38,7 @@ RCT_EXPORT_MODULE(KeyboardExtenderManager)
+ 
+ // Expose the `enabled` prop to React Native
+ RCT_EXPORT_VIEW_PROPERTY(enabled, BOOL)
++RCT_EXPORT_VIEW_PROPERTY(glass, BOOL)
+ 
+ + (BOOL)requiresMainQueueSetup
+ {
+@@ -101,6 +102,7 @@ RCT_EXPORT_VIEW_PROPERTY(enabled, BOOL)
+ #endif
+     _contentView = [[UIView alloc] initWithFrame:CGRectZero];
+     _attachedInputs = [NSHashTable weakObjectsHashTable];
++    _glass = YES;
+   }
+   [_touchHandler attachToView:_contentView];
+   [self startObserving];
+@@ -182,7 +184,8 @@ RCT_EXPORT_VIEW_PROPERTY(enabled, BOOL)
+   _sharedInputAccessoryView = [KeyboardExtenderContainerView
+       createWithFrame:CGRectMake(
+                           0, 0, UIScreen.mainScreen.bounds.size.width, internalFrame.size.height)
+-          contentView:_contentView];
++          contentView:_contentView
++                glass:_glass];
+ }
+ 
+ - (void)attachInputAccessoryViewTo:(UIView<UITextInput> *)input
+@@ -259,6 +262,10 @@ RCT_EXPORT_VIEW_PROPERTY(enabled, BOOL)
+ 
+   const auto &newViewProps = *std::static_pointer_cast<const KeyboardExtenderProps>(props);
+ 
++  if (newViewProps.glass != self.glass) {
++    [self updateGlassState:newViewProps.glass];
++  }
++
+   if (newViewProps.enabled != self.enabled) {
+     [self updateEnabledState:newViewProps.enabled];
+   }
+@@ -272,8 +279,31 @@ RCT_EXPORT_VIEW_PROPERTY(enabled, BOOL)
+ 
+   [self updateEnabledState:enabled];
+ }
++
++- (void)setGlass:(BOOL)glass
++{
++  [self updateGlassState:glass];
++}
+ #endif
+ 
++// The container is built once with its style, so a change rebuilds it.
++- (void)updateGlassState:(BOOL)glass
++{
++  _glass = glass;
++
++  if (!_sharedInputAccessoryView) {
++    return;
++  }
++
++  [self detachInputAccessoryView];
++  [_contentView removeFromSuperview];
++  _sharedInputAccessoryView = nil;
++
++  if (_enabled) {
++    [self updateEnabledState:YES];
++  }
++}
++
+ - (void)updateEnabledState:(BOOL)enabled
+ {
+   _enabled = enabled;
+diff --git a/src/specs/KeyboardExtenderNativeComponent.ts b/src/specs/KeyboardExtenderNativeComponent.ts
+index ac0dbfe..e29a45d 100644
+--- a/src/specs/KeyboardExtenderNativeComponent.ts
++++ b/src/specs/KeyboardExtenderNativeComponent.ts
+@@ -2,9 +2,11 @@ import codegenNativeComponent from "react-native/Libraries/Utilities/codegenNati
+ 
+ import type { HostComponent } from "react-native";
+ import type { ViewProps } from "react-native/Libraries/Components/View/ViewPropTypes";
++import type { WithDefault } from "react-native/Libraries/Types/CodegenTypes";
+ 
+ export interface NativeProps extends ViewProps {
+   enabled?: boolean;
++  glass?: WithDefault<boolean, true>;
+ }
+ 
+ export default codegenNativeComponent<NativeProps>("KeyboardExtender", {
+diff --git a/src/types/views.ts b/src/types/views.ts
+index e1da3bd..03c7f3a 100644
+--- a/src/types/views.ts
++++ b/src/types/views.ts
+@@ -48,6 +48,8 @@ export type KeyboardBackgroundViewProps = PropsWithChildren<ViewProps>;
+ export type KeyboardExtenderProps = PropsWithChildren<{
+   /** Controls whether this `KeyboardExtender` instance should take an effect. Default is `true`. */
+   enabled?: boolean;
++  /** iOS 26+: wrap the content in a full-width glass capsule. When `false`, the capsule is transparent (same position) and the content draws its own surface. Default is `true`. */
++  glass?: boolean;
+ }>;
+ export type KeyboardToolbarGroupViewProps = PropsWithChildren<ViewProps>;
+ export type ClippingScrollViewProps = PropsWithChildren<
+diff --git a/src/views/KeyboardExtender/index.ios.tsx b/src/views/KeyboardExtender/index.ios.tsx
+index 69aeb87..1a58d83 100644
+--- a/src/views/KeyboardExtender/index.ios.tsx
++++ b/src/views/KeyboardExtender/index.ios.tsx
+@@ -22,11 +22,11 @@ import type { PropsWithChildren } from "react";
+  * ```
+  */
+ const KeyboardExtender = (props: PropsWithChildren<KeyboardExtenderProps>) => {
+-  const { children, enabled = true } = props;
++  const { children, enabled = true, glass = true } = props;
+   const { width } = useWindowDimensions();
+ 
+   return (
+-    <RCTKeyboardExtender enabled={enabled}>
++    <RCTKeyboardExtender enabled={enabled} glass={glass}>
+       <View style={{ width }}>{children}</View>
+     </RCTKeyboardExtender>
+   );
